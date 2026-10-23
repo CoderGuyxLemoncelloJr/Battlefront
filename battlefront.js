@@ -157,11 +157,13 @@ var minimapView = {
 };
 var inventoryState = {
     selected: 0,
+    lastWeapon: null,
     readyAt: 0,
     cosmeticsOpen: false,
     uiConsumed: false
 };
 var getHeldItem;
+var returnToWeapon;
 var drawHeldItem;
 var drawPlacementPreview;
 var removePlacedCrates;
@@ -262,6 +264,7 @@ var Sniper;
 var E11;
 var Blaster;
 var Lightsaber;
+var lightsaber;
 var Laser;
 var Detonator;
 var DashArrow;
@@ -1463,8 +1466,8 @@ var renderBlaster = function(gun, skinName, pose) {
     stroke(hand.stroke);
     strokeWeight(5);
     fill(hand.fill);
-    ellipse(36 + 2 * constrain(tactical, 0, 1), -9 - 6 * constrain(tactical, 0, 1), 30, 30);
-    ellipse(78 + (70 - 78) * constrain(tactical, 0, 1), 7 + (14 - 7) * constrain(tactical, 0, 1) + 15, 30, 30);
+    ellipse(22, 18, 30, 30);
+    ellipse(76, 14, 30, 30);
     popStyle();
     popMatrix();
 };
@@ -3530,7 +3533,7 @@ var glowLine = function(x1, y1, x2, y2, glowColor, vertical) {
     strokeWeight(StrokeWeight);
     line(x1, y1, x2, y2);
 };
-var lightsaber = function(x, y, s, r, type, on, bladeLength) {
+lightsaber = function(x, y, s, r, type, on, bladeLength) {
     var drawnBladeLength = bladeLength !== undefined ? bladeLength : on ? 1 : 0;
     rectMode(CENTER);
     pushMatrix();
@@ -3566,6 +3569,21 @@ var lightsaber = function(x, y, s, r, type, on, bladeLength) {
     }
     popMatrix();
 };
+imagesToLoad.push({
+    name: "saber_hotbar_blue",
+    w: 64,
+    h: 64,
+    display: function() {
+        lightsaber(23, 48, 48, 35, "Luke Skywalker", true, 1);
+    }
+}, {
+    name: "saber_hotbar_red",
+    w: 64,
+    h: 64,
+    display: function() {
+        lightsaber(23, 48, 48, 35, "Kylo Ren", true, 1);
+    }
+});
 var loadScreen = function() {
     textAlign(CENTER, CENTER);
     textFont(basicHeaderFont, 12);
@@ -5172,134 +5190,94 @@ var GameConsole = function(command) {
     addConsoleHistory(" ——————————————————————————————————————————————————————————————————————", true);
 };
 var drawDevConsole = function() {
-    noStroke();
-    textAlign(0, 0);
-    textSize(15);
-    textFont(createFont("Consolas"));
-    if (devConsole.input.charAt(0) === "/") {
-        var lower = devConsole.input.toLowerCase();
-        filteredCommands = commands.filter(function(c) {
-            return c.indexOf(lower) === 0;
-        });
-        if (filteredCommands.length === 0) {
-            matchIndex = 0;
-        } else {
-            matchIndex = constrain(matchIndex, 0, filteredCommands.length - 1);
-        }
-    } else {
-        filteredCommands = [];
-        matchIndex = 0;
-    }
-    fill(38, 38, 38);
-    rect(300, height - 50 + 200 + consoleHeight, width, 800);
-    pushMatrix();
-    if (consoleHeight > 220) {
-        translate(0, consoleHeight - 220);
-    }
-    fill(100, 150, 240);
-    text(">", 5, height - 10);
-    var blink = floor((tickClock.realMs / tickClock.baseMs) / 40) % 2 === 0 ? "_" : " ";
-    fill(140);
-    text(devConsole.input + blink, 15, height - 10);
-    popMatrix();
-    var visibleLines = floor((-consoleHeight + 210) / lineHeight);
-    maxScrollLines = Math.max(0, devConsole.history.length - visibleLines);
-    //Clamp targetScrollY in pixels
-    var maxScrollPixels = maxScrollLines * lineHeight;
-    targetScrollY = constrain(targetScrollY, 0, maxScrollPixels);
-    //Smoothly move scrollY toward targetScrollY (ease with lerp)
-    scrollY = lerp(scrollY, targetScrollY, uiEase(0.2));
-    //Calculate base y position offset by scrollY
-    var baseY = height - 30 + scrollY;
-    for (var i = 0; i < devConsole.history.length; i++) {
-        var entry = devConsole.history[i];
-        var y = baseY - i * lineHeight;
-        //Only draw lines inside the visible console area
-        if (y < height - 30 && y > height - 30 - visibleLines * lineHeight) {
-            if (entry.userInput) {
-                fill(140);
-                text(">", 5, y);
-                fill(180);
-                textSize(15);
-                text(entry.text, 15, y);
-            } else {
-                if (entry.error) {
-                    fill(255, 100, 100);
-                } else {
-                    fill(255, 255, 255);
-                }
-                textSize(15);
-                text(entry.text, 5, y);
-            }
-        }
-    }
+    pushStyle();
     rectMode(CORNER);
-    if (devConsole.input.charAt(0) === "/" && filteredCommands.length > 0 && devConsole.active) {
-        var boxX = 15; //aligns with input text
-        var lineH = 18;
-        var maxShow = min(12, filteredCommands.length);
-        var boxW = 231;
-        var boxH = lineH * maxShow;
-        var boxY = height - 28 - boxH; //start above the input line
-        fill(30, 30, 30, 220);
-        rect(boxX, boxY + 1, boxW, boxH + 2, 5); //top-left based
-        for (var i = 0; i < maxShow; i++) {
-            var cmd = filteredCommands[i];
-            var y = boxY + i * lineH;
-            fill(230);
-            textSize(13);
-            textAlign(LEFT, CENTER);
-            text(cmd, boxX + 5, y + lineH / 2); //vertical center of line
-        }
-    }
-    if (mouseX > 260 && mouseX < 340 && mouseY > 340 + consoleHeight && mouseY < 360 + consoleHeight && !holding && !transitionD && !transitionU) {
-        if (mouseIsPressed) {
-            holding = true;
-        }
-    }
+    textAlign(LEFT, BASELINE);
+    textFont(basicMainFont, 15);
+    noStroke();
+    var fullHeight = 250 - height;
     if (!mouseIsPressed) {
         holding = false;
     }
-    mouseOut = function() {
-        holding = false;
-    };
     if (holding && !transitionD && !transitionU && !transitionT) {
-        fill(110);
-        consoleHeight = mouseY - 350;
-    } else {
-        fill(90);
+        consoleHeight = constrain(mouseY - (height - 250), fullHeight, 250);
     }
-    if (consoleHeight > 200 && !holding && !transitionD && !transitionU && !transitionT) {
-        transitionD = true;
+    if (!holding && !transitionD && !transitionU && !transitionT) {
+        if (consoleHeight > 200 && devConsole.active) {
+            transitionD = true;
+        } else if (consoleHeight < fullHeight + 40 && consoleHeight > fullHeight + 5) {
+            transitionT = true;
+        }
     }
-    if (consoleHeight < -310 && !holding && !transitionD && !transitionU && !transitionT) {
-        transitionT = true;
-    }
-    if (transitionD === true) {
-        consoleHeight = lerp(consoleHeight, 250, uiEase(0.1));
-        if (consoleHeight > 245) {
+    var consoleTarget = transitionD ? 250 : transitionT ? fullHeight : 0;
+    if (transitionD || transitionU || transitionT) {
+        consoleHeight = lerp(consoleHeight, consoleTarget, uiEase(0.15));
+        if (abs(consoleHeight - consoleTarget) < 1) {
+            consoleHeight = consoleTarget;
+            devConsole.active = !transitionD;
             transitionD = false;
-            devConsole.active = false;
-        }
-    }
-    if (transitionT === true) {
-        consoleHeight = lerp(consoleHeight, -350, uiEase(0.1));
-        if (consoleHeight < -345) {
-            transitionT = false;
-            devConsole.active = true;
-        }
-    }
-    if (transitionU === true) {
-        consoleHeight = lerp(consoleHeight, 0, uiEase(0.1));
-        if (consoleHeight < 5) {
             transitionU = false;
-            devConsole.active = true;
+            transitionT = false;
         }
     }
-    if (!devConsole.active && consoleHeight < 200 && !transitionU && !transitionD && !transitionT) {
+    var top = constrain(height - 250 + consoleHeight, 0, height);
+    var handleY = constrain(top - 10, 0, height - 20);
+    if (mouseX >= width / 2 - 40 && mouseX <= width / 2 + 40 && mouseY >= handleY && mouseY <= handleY + 20 && mouseIsPressed && !transitionD && !transitionU && !transitionT) {
+        holding = true;
         devConsole.active = true;
     }
-    rect(300 - 40, 340 + consoleHeight, 80, 20, 5);
+    fill(22, 28, 38, 235);
+    rect(0, top, width, height - top);
+    if (top < height - 25) {
+        var visibleLines = max(0, floor((height - top - 48) / lineHeight));
+        maxScrollLines = max(0, devConsole.history.length - visibleLines);
+        consoleScroll = constrain(consoleScroll, 0, maxScrollLines);
+        targetScrollY = consoleScroll * lineHeight;
+        scrollY = lerp(scrollY, targetScrollY, uiEase(0.2));
+        for (var historyIndex = 0; historyIndex < devConsole.history.length; historyIndex++) {
+            var entry = devConsole.history[historyIndex];
+            var lineY = height - 42 + scrollY - historyIndex * lineHeight;
+            if (lineY < top + 18 || lineY > height - 38) {
+                continue;
+            }
+            fill(entry.error ? color(255, 110, 110) : entry.userInput ? color(165, 190, 210) : color(225, 235, 245));
+            var lineText = (entry.userInput ? "> " : "") + entry.text;
+            while (lineText.length > 0 && textWidth(lineText) > width - 24) {
+                lineText = lineText.slice(0, -1);
+            }
+            text(lineText, 12, lineY);
+        }
+        var inputText = devConsole.input;
+        var blink = floor(tickClock.realMs / 650) % 2 === 0 ? "_" : " ";
+        while (inputText.length > 0 && textWidth(inputText + blink) > width - 42) {
+            inputText = inputText.slice(1);
+        }
+        fill(100, 180, 240);
+        text(">", 12, height - 14);
+        fill(220, 235, 245);
+        text(inputText + blink, 28, height - 14);
+        filteredCommands = devConsole.input.charAt(0) === "/" ? commands.filter(function(command) {
+            return command.indexOf(devConsole.input.toLowerCase()) === 0;
+        }) : [];
+        matchIndex = constrain(matchIndex, 0, max(0, filteredCommands.length - 1));
+        if (devConsole.active && filteredCommands.length > 0) {
+            var maxShow = min(12, filteredCommands.length, max(0, floor((height - top - 48) / 18)));
+            var firstMatch = max(0, matchIndex - maxShow + 1);
+            var boxY = height - 32 - maxShow * 18;
+            fill(18, 25, 35, 245);
+            rect(24, boxY, min(320, width - 36), maxShow * 18, 4);
+            textAlign(LEFT, CENTER);
+            textSize(13);
+            for (var matchRow = 0; matchRow < maxShow; matchRow++) {
+                var commandIndex = firstMatch + matchRow;
+                fill(commandIndex === matchIndex ? color(100, 200, 255) : color(220, 230, 240));
+                text(filteredCommands[commandIndex], 30, boxY + matchRow * 18 + 9);
+            }
+        }
+    }
+    fill(holding ? 120 : 80, 130, 160, 200);
+    rect(width / 2 - 40, handleY, 80, 20, 5);
+    popStyle();
 };
 /**Create Collisions Framework**/
 var Collision = function(config) {
@@ -9448,16 +9426,47 @@ var Landmine = function(config) {
     this.explosionFadeFrames = 50;
     this.explosionMax = 500 + random(-60, 60);
     this.type = config.type || "blue";
+    this.owner = config.owner || null;
+    this.armDelay = config.armDelay !== undefined ? config.armDelay : 45;
+    this.triggerRadius = config.triggerRadius !== undefined ? config.triggerRadius : 85;
+    this.nextTriggerMs = 0;
+    this.explosionDamageMax = config.explosionDamageMax !== undefined ? config.explosionDamageMax : 150;
+    this.damageDone = false;
 };
 Landmine.prototype = Object.create(Entity.prototype);
 Landmine.prototype.update = function() {
     var tick = tickClock.scale;
     if (this.exploding) {
         this.explosionTime += 0.3 * tick;
+        if (!this.damageDone) {
+            this.damageDone = true;
+            Detonator.prototype.doExplosionDamage.call(this);
+        }
         if (this.explosionTime >= this.explosionGrowFrames + this.explosionFadeFrames) {
             return "delete";
         }
         return false;
+    }
+    this.armDelay = max(0, this.armDelay - tick);
+    if (this.armDelay === 0 && tickClock.gameMs >= this.nextTriggerMs) {
+        this.nextTriggerMs = tickClock.gameMs + 100;
+        var ownerTeam = this.owner ? this.owner.team : undefined;
+        var mineLayer = floor(this.pos.z);
+        var triggered = playerHealth > 0 && ownerTeam !== playerTeam && abs(playerPos.z - this.pos.z) < 0.6 && dist(playerPos.x, playerPos.y, this.pos.x, this.pos.y) <= this.triggerRadius;
+        var nearby = currentMap.entities[mineLayer] || [];
+        for (var mineIndex = 0; mineIndex < nearby.length && !triggered; mineIndex++) {
+            var actor = nearby[mineIndex];
+            if (actor !== this && actor.health > 0 && actor.team !== ownerTeam && actor.pos && abs(actor.pos.z - this.pos.z) < 0.6 && dist(actor.pos.x, actor.pos.y, this.pos.x, this.pos.y) <= this.triggerRadius) {
+                triggered = true;
+            }
+        }
+        if (triggered) {
+            this.exploding = true;
+            this.explosionTime = 0;
+            this.vel.mult(0);
+            playSound_("explosion", constrain(1 - dist(playerPos.x, playerPos.y, this.pos.x, this.pos.y) / 2200, 0.12, 1) / 3);
+            return false;
+        }
     }
     this.rv += this.rVel * tick;
     this.vel.z -= 0.005 * tick;
@@ -11763,13 +11772,14 @@ Lightsaber.prototype.tryReload = function() {
 Lightsaber.prototype.render = function(skinName) {
     pushMatrix();
     translate(27, -28);
-    rotate(this.saberAngle - bodyAngle + this.swing + this.spinAngle);
+    rotate(this.swing + this.spinAngle);
     lightsaber(0, 0, 180, 0, skinName === "Kylo Ren" ? "Kylo Ren" : "Luke Skywalker", this.on, this.bladeLength);
     var hand = getHandColors(skinName);
     fill(hand.fill);
     stroke(hand.stroke);
     strokeWeight(3);
     ellipse(5, 8, 17, 17);
+    ellipse(5, 23, 17, 17);
     popMatrix();
 };
 /**Create Abilities**/
@@ -11814,6 +11824,9 @@ Ability.prototype.update = function() {
         if (this.durationCount === 0) {
             this.onDeactivate();
             this.rechargeCount = this.rechargeTime;
+            if (this.heldItem && getHeldItem() === this) {
+                returnToWeapon();
+            }
         }
         return;
     }
@@ -11826,6 +11839,9 @@ Ability.prototype.update = function() {
         if (this.durationCount <= 0) {
             this.onDeactivate();
             this.rechargeCount = this.rechargeTime;
+            if (this.heldItem && getHeldItem() === this) {
+                returnToWeapon();
+            }
         }
     }
 };
@@ -11979,7 +11995,11 @@ var PlantLandmine = function(placement) {
         xVel: 0,
         yVel: 0,
         zVel: 0,
-        r: random(-0.2, 0.2)
+        r: random(-0.2, 0.2),
+        owner: {
+            isPlayer: true,
+            team: playerTeam
+        }
     });
     if (!currentMap.entities[layer]) {
         currentMap.entities[layer] = [];
@@ -12237,12 +12257,23 @@ var selectHeldItem = function(slot) {
     if (slot < 0 || slot > getSelectedCharacterData().abilities.length) {
         return;
     }
+    if (inventoryState.selected === 0 && slot !== 0) {
+        inventoryState.lastWeapon = currentGun;
+    }
     inventoryState.selected = slot;
     inventoryState.readyAt = tickClock.gameMs + 180;
     inventoryState.suppressClick = !!mouseIsPressed;
     if (slot !== 0) {
         stopSaberAudio();
     }
+};
+returnToWeapon = function() {
+    if (inventoryState.lastWeapon) {
+        currentGun = inventoryState.lastWeapon;
+    }
+    inventoryState.selected = 0;
+    inventoryState.suppressClick = true;
+    inventoryState.uiConsumed = true;
 };
 var handleInventoryInput = function() {
     if (!mouseIsPressed && mouseClick !== true) {
@@ -12294,9 +12325,17 @@ var drawItemIcon = function(item, x, y, size) {
 drawHeldItem = function(item) {
     var useProgress = item.durationCount > 0 ? 1 - item.durationCount / item.duration : 0;
     pushMatrix();
-    translate(19, -30 - sin(useProgress * 180) * 9);
-    rotate(-bodyAngle - walkSway);
-    drawItemIcon(item, 0, 0, item.itemName === "Crate" ? 40 : 30);
+    pushStyle();
+    translate(0, -43 - sin(useProgress * 180) * 9);
+    var itemSize = item.itemName === "Crate" ? 40 : 30;
+    drawItemIcon(item, 0, 0, itemSize);
+    var hand = getHandColors(skin);
+    stroke(hand.stroke);
+    strokeWeight(3);
+    fill(hand.fill);
+    ellipse(-itemSize * 0.48, 6, 17, 17);
+    ellipse(itemSize * 0.48, 6, 17, 17);
+    popStyle();
     popMatrix();
 };
 drawPlacementPreview = function() {
@@ -12335,6 +12374,14 @@ var drawInventoryHUD = function(data) {
         rect(x, y, 78, 62, 5);
         if (item) {
             drawItemIcon(item, x, y - 5, 29);
+        } else if (currentGun.isLightsaber) {
+            drawImg(loadedImages[skin === "Kylo Ren" ? "saber_hotbar_red" : "saber_hotbar_blue"], x - 24, y - 29, 48, 48);
+        } else {
+            pushMatrix();
+            translate(x - 24, y - 10);
+            scale(0.42);
+            currentGun.render();
+            popMatrix();
         }
         noStroke();
         fill(225, 235, 245, 180);
@@ -12343,7 +12390,7 @@ var drawInventoryHUD = function(data) {
         text(slot + 1, x - 32, y - 25);
         textAlign(CENTER, CENTER);
         if (!item || selected || (abs(mouseX - x) <= 39 && abs(mouseY - y) <= 31)) {
-            text(item ? item.itemName : currentGun.isLightsaber ? "Saber" : "Blaster", x, y + (item ? 21 : 0));
+            text(item ? item.itemName : currentGun.isLightsaber ? "Saber" : "Blaster", x, y + 21);
         }
         if (item) {
             textAlign(RIGHT, TOP);
@@ -12531,7 +12578,7 @@ keyPressed = function() {
     }
     if (devConsole.active) {
         if (keyCode === UP) {
-            consoleScroll = min(consoleScroll + 1, max(0, devConsole.history.length - 14));
+            consoleScroll = min(consoleScroll + 1, maxScrollLines);
         } else if (keyCode === DOWN) {
             consoleScroll = max(consoleScroll - 1, 0);
         }
