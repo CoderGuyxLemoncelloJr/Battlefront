@@ -9,7 +9,7 @@ function game(id, host) {
   vm.runInContext(source, g, {timeout: 10000});
   const net = g.battlefrontNet;
   net.state = {connected:true,host,id,hostId:'host',epoch:1,peers:[{id:'host',name:'Host',host:true},{id:'guest',name:'Guest',host:false}],ping:40};
-  net.lobby = false; net.started = true; net.wasHost = host; net.name = host ? 'Host' : 'Guest';
+  net.mode = "multi"; net.view = ""; net.lobby = false; net.started = true; net.wasHost = host; net.name = host ? 'Host' : 'Guest';
   g.soundEnabled = false;
   g.stageTransition.active = false;
   g.transitionToPlay(g.Jakku);
@@ -116,5 +116,39 @@ test('guest motion interpolates players and shots, takes the short turn, and is 
   guest.net.applyWorld(next,true);
   assert.equal(guest.g.playerPos.x,next.actors.find(row=>row.id==='guest').x);
   assert.equal(Object.keys(guest.net.visuals).length,0);
+});
+test('singleplayer runs without the bridge and multiplayer Play opens only fixed servers', () => {
+  const solo=game('solo',false);
+  solo.net.pick('solo');solo.net.state.connected=false;
+  solo.g.transitionToPlay(solo.g.Jakku);solo.g.stageTransition.afterSwitch();solo.g.stageTransition.active=false;
+  solo.g.gameStage='Play';solo.g.matchState.phase='live';
+  const start=solo.g.playerPos.x;solo.g.keys[68]=true;
+  for(let i=0;i<12;i++)solo.frame(i*1000/60);
+  assert(solo.g.playerPos.x>start);assert.equal(solo.net.outbox.length,0);
+  solo.net.pick('multi');solo.g.mouseX=solo.g.width/2;solo.g.mouseY=solo.g.height/2;
+  solo.g.mousePressed();assert.equal(solo.net.view,'servers');assert(solo.net.lobby);
+  solo.g.mouseX=solo.g.width/2+220;solo.g.mouseY=solo.g.height/2-45;
+  solo.g.mousePressed();assert.equal(solo.net.request.type,'server');assert.equal(solo.net.request.server,'BFPUBLIC01');
+});
+test('joining a server starts automatically, late joins sync, and rounds rotate without disconnecting', () => {
+  const host=game('host',true), guest=game('guest',false);
+  host.net.started=false;host.net.server=0;host.net.poll();
+  assert(host.g.stageTransition.active);host.g.stageTransition.afterSwitch();host.g.stageTransition.active=false;
+  assert.equal(host.g.currentMap,host.g.Kashyyyk);assert.equal(host.g.matchState.phase,'countdown');
+  receive(host.net,input());
+  guest.net.waiting=true;guest.net.applyWorld(JSON.parse(JSON.stringify(host.net.snapshot())),false);
+  assert.equal(guest.net.waiting,false);
+  const round=host.net.round;
+  host.g.matchState.phase='ending';host.g.matchState.endingFrame=host.g.matchState.endingHoldFrames;
+  host.g.updateGameTick();assert(host.g.stageTransition.active);
+  host.g.stageTransition.afterSwitch();host.g.stageTransition.active=false;
+  assert.equal(host.g.currentMap,host.g.Jakku);assert.equal(host.g.matchState.gameMode,'Battle Royale');
+  assert(host.net.round>round);assert.equal(host.net.state.peers.length,2);assert(host.net.state.connected);
+  receive(host.net,input());
+  guest.net.applyWorld(JSON.parse(JSON.stringify(host.net.snapshot())),false);
+  assert.equal(guest.g.currentMap,guest.g.Jakku);assert.equal(guest.g.matchState.gameMode,'Battle Royale');
+  host.g.matchState.phase='ending';host.g.matchState.endingFrame=host.g.matchState.endingHoldFrames;
+  host.g.updateGameTick();host.g.stageTransition.afterSwitch();host.g.stageTransition.active=false;
+  assert.equal(host.g.currentMap,host.g.StarDestroyer);assert.equal(host.g.matchState.gameMode,'Team Deathmatch');
 });
 console.log(passed+' multiplayer game checks passed');

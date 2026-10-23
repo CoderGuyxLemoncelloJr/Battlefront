@@ -1,13 +1,13 @@
 /*
 Multiplayer test: install the bridge, then open this with ?editor=no.
 Bridge: https://greasyfork.org/en/scripts/601833-battlefront-v3-multiplayer
-Hit Host, copy the invite, and send it to a friend. They hit Join.
+Choose Singleplayer, or Multiplayer BETA then Play and a server.
 The host runs the match. If they leave, another player takes over.
 */
 var battlefrontNet = {
   protocol: "battlefront-v3-wss-1", projectId: "5684189710893056",
   state: {connected: false, host: false, id: "", hostId: "", epoch: 0, peers: [], ping: 0, invite: "", message: "Install the bridge userscript first"},
-  inbox: [], outbox: [], request: null, lobby: true, focused: true,
+  inbox: [], outbox: [], request: null, lobby: true, focused: true, mode: "", view: "mode", server: 0, cycle: 0,
   name: "Player", invite: "", pasted: "", field: "name", className: "Assault", team: 1,
   inputs: {}, remotes: {}, round: 0, entityCounter: 0, started: false, wasHost: false,
   waiting: true, lastWorld: null, lastSendAt: 0, lastSnapshotAt: 0,
@@ -1822,7 +1822,7 @@ var playerDie = function(respawnNow) {
     if (deathScreenActive) {
       return;
     }
-    if (matchState.gameMode === "Battle Royale" && matchState.phase === "live") {
+    if (matchState.gameMode === "Battle Royale" && matchState.phase === "live" && battlefrontNet.mode !== "multi") {
       matchState.phase = "ending";
       matchState.winnerTeam = -2;
       matchState.endingFrame = 0;
@@ -12820,6 +12820,7 @@ var updateGameTick = function() {
   if (matchState.phase === "ending" && !stageTransition.active) {
     matchState.endingFrame += tickClock.scale;
     if (matchState.endingFrame >= matchState.endingHoldFrames) {
+      if (battlefrontNet.mode === "multi" && battlefrontNet.state.host) { battlefrontNet.nextRound(false); return; }
       stopSaberAudio();
       startStageTrans("Menu", function() {
         resetMatchForHome();
@@ -12871,7 +12872,7 @@ var updateGameTick = function() {
     if (!deathScreenActive) {
       updatePlayerVitals();
     }
-    if (matchState.gameMode === "Battle Royale" && matchState.phase === "live") {
+    if (matchState.gameMode === "Battle Royale" && matchState.phase === "live" && battlefrontNet.mode !== "multi") {
       if (playerHealth <= 0) {
         matchState.phase = "ending";
         matchState.winnerTeam = -2;
@@ -13041,7 +13042,7 @@ var updateGameTick = function() {
   }
   if (deathScreenActive && !stageTransition.active) {
     deathScreenFrame += tickClock.wallStepMs / tickClock.baseMs;
-    if (deathScreenFrame >= deathRespawnAt && !deathTransStarted) {
+    if (deathScreenFrame >= deathRespawnAt && !deathTransStarted && !(battlefrontNet.mode === "multi" && matchState.gameMode === "Battle Royale")) {
       deathTransStarted = true;
       startStageTrans("Play", function() {
         playerDie(true);
@@ -13573,84 +13574,114 @@ battlefrontNet.button = function(label, x, y, w, selected) {
   textAlign(CENTER, CENTER);
   text(label, x + w / 2, y + 18);
 };
-battlefrontNet.drawLobby = function() {
+battlefrontNet.servers = ["BFPUBLIC01", "BFPUBLIC02", "BFPUBLIC03"];
+battlefrontNet.pick = function(mode) {
   var net = battlefrontNet;
-  var x = width / 2;
-  var y = height / 2;
-  var panelWidth = min(560, width - 32);
-  var left = x - panelWidth / 2;
+  net.mode = mode;
+  net.view = "";
+  net.lobby = false;
+  net.started = false;
+  gameStage = "Menu";
+  currentMenu = null;
+  clearGameInput();
+};
+battlefrontNet.drawLobby = function() {
+  var net = battlefrontNet, x = width / 2, y = height / 2;
   background(10, 17, 28);
   pushStyle();
+  textFont(basicMainFont, 28);
+  textAlign(CENTER, CENTER);
   fill(220, 240, 255);
-  textFont(basicMainFont, 24);
-  textAlign(CENTER, CENTER);
-  text("BATTLEFRONT / MULTIPLAYER TEST", x, y - 160);
-  textSize(13);
-  fill(130, 185, 220);
-  text(net.state.message || "Install the bridge userscript first", x, y - 126);
-  textAlign(LEFT, CENTER);
-  fill(180, 210, 235);
-  text("Name", left + 8, y - 84);
-  text("Invite", left + 8, y - 28);
-  rectMode(CORNER);
-  fill(25, 42, 60, 220);
-  rect(left, y - 70, panelWidth, 34, 4);
-  rect(left, y - 14, panelWidth, 34, 4);
-  fill(235, 245, 255);
-  text(net.name + (net.field === "name" && floor(millis() / 600) % 2 === 0 ? "_" : ""), left + 10, y - 53);
-  var inviteText = net.invite || net.state.invite || "Paste your friend's invite here";
-  if (inviteText.length > 56) {
-    inviteText = inviteText.slice(0, 53) + "...";
-  }
-  text(inviteText, left + 10, y + 3);
-  var classes = ["Assault", "Specialist", "Heavy", "Jedi"];
-  for (var i = 0; i < classes.length; i++) {
-    net.button(classes[i], left + i * panelWidth / 4, y + 40, panelWidth / 4 - 6, net.className === classes[i]);
-  }
-  net.button("Team " + (net.team + 1), left, y + 87, 110, false);
-  if (net.state.connected) {
-    net.button("Copy invite", x - 60, y + 87, 125, false);
-    net.button("Back", x + 75, y + 87, 80, false);
-    net.button("Leave", x + 165, y + 87, 80, false);
+  text(net.view === "mode" ? "BATTLEFRONT" : "Servers", x, y - 190);
+  if (net.view === "mode") {
+    net.button("Singleplayer", x - 140, y - 30, 280, false);
+    net.button("Multiplayer BETA", x - 140, y + 28, 280, false);
   } else {
-    net.button("Host", x - 10, y + 87, 110, false);
-    net.button("Join", x + 110, y + 87, 110, false);
+    textSize(13);
+    fill(140, 190, 220);
+    text(net.state.message || "", x, y - 150);
+    textAlign(LEFT, CENTER);
+    text("Name", x - 275, y - 110);
+    fill(235, 245, 255);
+    text(net.name + (net.field === "name" ? "_" : ""), x - 210, y - 110);
+    var list = net.state.servers || [];
+    for (var i = 0; i < 3; i++) {
+      var row = list[i] || {map: ["Kashyyyk", "Jakku", "Star Destroyer"][i], mode: i === 1 ? "Battle Royale" : "Team Deathmatch", players: 0};
+      var top = y - 70 + i * 72;
+      fill(24, 43, 61, 210);
+      rectMode(CORNER);
+      rect(x - 285, top, 570, 60, 5);
+      fill(220, 235, 245);
+      textAlign(LEFT, CENTER);
+      textSize(16);
+      text("Front " + (i + 1), x - 270, top + 17);
+      textSize(12);
+      text(row.map + " / " + row.mode, x - 270, top + 41);
+      text(row.players + "/8", x + 110, top + 30);
+      net.button(row.players >= 8 ? "Full" : "Join", x + 175, top + 12, 95, net.server === i && net.state.connected);
+    }
+    net.button("Back", x - 135, y + 175, 120, false);
+    if (net.state.connected) {
+      net.button("Leave", x + 15, y + 175, 120, false);
+    }
   }
-  fill(115, 155, 185);
-  textAlign(CENTER, CENTER);
-  text("Host picks the map. Everyone needs the bridge.", x, y + 155);
   popStyle();
 };
 battlefrontNet.lobbyClick = function() {
-  var net = battlefrontNet;
-  var x = width / 2;
-  var y = height / 2;
-  var panelWidth = min(560, width - 32);
-  var left = x - panelWidth / 2;
-  if (mouseY >= y - 70 && mouseY <= y - 36) {
-    net.field = "name";
-  } else if (mouseY >= y - 14 && mouseY <= y + 20) {
-    net.field = "invite";
-  } else if (mouseY >= y + 40 && mouseY <= y + 76 && mouseX >= left && mouseX <= left + panelWidth) {
-    net.className = ["Assault", "Specialist", "Heavy", "Jedi"][constrain(floor((mouseX - left) / (panelWidth / 4)), 0, 3)];
-  } else if (mouseY >= y + 87 && mouseY <= y + 123) {
-    if (mouseX >= left && mouseX <= left + 110) {
-      net.team = 1 - net.team;
-    } else if (net.state.connected) {
-      if (mouseX >= x - 60 && mouseX <= x + 65) {
-        net.requestRoom("copy");
-      } else if (mouseX >= x + 75 && mouseX <= x + 155) {
-        net.lobby = false;
-      } else if (mouseX >= x + 165 && mouseX <= x + 245) {
-        net.requestRoom("leave");
-        net.started = false;
-      }
-    } else if (mouseX >= x - 10 && mouseX <= x + 100) {
-      net.requestRoom("create");
-    } else if (mouseX >= x + 110 && mouseX <= x + 220) {
-      net.requestRoom("join");
+  var net = battlefrontNet, x = width / 2, y = height / 2;
+  if (net.view === "mode") {
+    if (abs(mouseX - x) <= 140) {
+      if (mouseY >= y - 30 && mouseY <= y + 6) { net.pick("solo"); }
+      if (mouseY >= y + 28 && mouseY <= y + 64) { net.pick("multi"); }
+    }
+    return;
+  }
+  if (abs(mouseY - (y - 110)) < 20) { net.field = "name"; return; }
+  for (var i = 0; i < 3; i++) {
+    var top = y - 70 + i * 72;
+    if (mouseX >= x + 175 && mouseX <= x + 270 && mouseY >= top + 12 && mouseY <= top + 48) {
+      var row = (net.state.servers || [])[i];
+      if (row && row.players >= 8) { return; }
+      net.server = i;
+      net.started = false;
+      net.lastWorld = null;
+      net.visuals = {};
+      net.waiting = true;
+      net.className = ["Assault", "Specialist", "Heavy", "Jedi"].indexOf(character) >= 0 ? character : "Assault";
+      net.request = {type: "server", server: net.servers[i], name: net.name};
+      return;
     }
   }
+  if (mouseY >= y + 175 && mouseY <= y + 211) {
+    if (mouseX >= x - 135 && mouseX <= x - 15) { net.lobby = false; }
+    if (mouseX >= x + 15 && mouseX <= x + 135 && net.state.connected) {
+      net.requestRoom("leave"); net.started = false; net.lastWorld = null;
+      gameStage = "Menu"; resetMatchForHome();
+    }
+  }
+};
+battlefrontNet.nextRound = function(first) {
+  var net = battlefrontNet;
+  if (!first) { net.cycle++; }
+  resetMatchForHome();
+  stageTransition.active = false;
+  matchModeIndex = net.cycle % 2;
+  transitionToPlay(net.map(["Kashyyyk", "Jakku", "Star Destroyer"][net.cycle % 3]));
+};
+battlefrontNet.baseMenu = menu;
+menu = function() {
+  var net = battlefrontNet;
+  if (net.mode !== "multi") { net.baseMenu(); return; }
+  background(10, 17, 28);
+  fill(220, 240, 255);
+  textAlign(CENTER, CENTER);
+  textFont(basicMainFont, 32);
+  text("BATTLEFRONT", width / 2, height / 2 - 145);
+  textSize(13);
+  text("MULTIPLAYER BETA", width / 2, height / 2 - 103);
+  net.button("Play", width / 2 - 110, height / 2 - 20, 220, false);
+  net.button("Shop", width / 2 - 110, height / 2 + 35, 220, false);
+  net.button("Back", width / 2 - 110, height / 2 + 90, 220, false);
 };
 battlefrontNet.resetRound = function() {
   battlefrontNet.remotes = {};
@@ -13702,6 +13733,7 @@ battlefrontNet.spawnHuman = function(peer, input, restored) {
   actor.useLeft = 0;
   actor.useKind = 0;
   actor.respawnLeft = 0;
+  if (!restored && matchState.gameMode === "Battle Royale" && matchState.phase === "live") { actor.health = 0; }
   if (restored) {
     net.restoreActor(actor, restored);
   }
@@ -13843,10 +13875,11 @@ battlefrontNet.updateHuman = function(actor) {
   var tick = tickClock.scale;
   var record = net.inputs[actor.netId];
   var input = record && millis() - record.at < 300 ? record.data : {};
-  if (!net.state.connected || gameStage !== "Play" || matchState.phase !== "live" || net.lobby) {
+  if (!net.state.connected || gameStage !== "Play" || matchState.phase !== "live") {
     return false;
   }
   if (actor.health <= 0 || actor.pos.z < currentMap.killZ) {
+    if (matchState.gameMode === "Battle Royale") { actor.health = 0; actor.vel.mult(0); return false; }
     if (!actor.respawnLeft) {
       actor.respawnLeft = 180;
       actor.health = 0;
@@ -14040,6 +14073,7 @@ battlefrontNet.snapshot = function() {
   var net = battlefrontNet;
   var world = {
     round: net.round,
+    cycle: net.cycle || 0,
     stage: gameStage,
     map: net.mapName(currentMap),
     tick: tickClock.tick,
@@ -14263,6 +14297,7 @@ battlefrontNet.applyWorld = function(world, promote) {
     return;
   }
   net.lastWorld = world;
+  net.cycle = world.cycle || 0;
   if (world.stage !== "Play") {
     if (!promote) {
       net.waiting = true;
@@ -14466,6 +14501,8 @@ battlefrontNet.applyWorld = function(world, promote) {
 };
 battlefrontNet.poll = function() {
   var net = battlefrontNet;
+  if (net.mode === "solo" || !net.mode) { return; }
+  if (net.lobby && !net.request && millis() - (net.listAt === undefined ? -5000 : net.listAt) >= 5000) { net.listAt = millis(); net.request = {type: "list"}; }
   if (net.pasted) {
     net.invite = net.pasted;
     net.pasted = "";
@@ -14478,7 +14515,8 @@ battlefrontNet.poll = function() {
     net.lobby = false;
     net.waiting = !net.state.host;
     if (net.state.host) {
-      gameStage = "Menu";
+      net.cycle = net.server || 0;
+      net.nextRound(true);
     }
   }
   if (net.state.host && !net.wasHost && net.lastWorld) {
@@ -14531,6 +14569,7 @@ battlefrontNet.poll = function() {
   }
   net.lastSendAt = millis();
   if (net.state.host) {
+    if (stageTransition.active) { return; }
     var world = net.snapshot();
     world.spawns = currentMap && currentMap._matchClusterSpawns;
     net.lastWorld = world;
@@ -14575,7 +14614,7 @@ battlefrontNet.baseAIUpdate = AIPlayer.prototype.update;
 battlefrontNet.baseAIRender = AIPlayer.prototype.render;
 battlefrontNet.baseTransition = transitionToPlay;
 editorRecommendationVisible = false;
-matchGameModes = ["Team Deathmatch"];
+matchGameModes = ["Team Deathmatch", "Battle Royale"];
 transitionToPlay = function(map) {
   battlefrontNet.resetRound();
   battlefrontNet.baseTransition(map);
@@ -14594,25 +14633,36 @@ AIPlayer.prototype.render = function() {
   }
 };
 updateGameTick = function() {
-  if (!battlefrontNet.state.connected || !battlefrontNet.state.host || battlefrontNet.lobby) {
+  if (battlefrontNet.mode === "solo") { battlefrontNet.baseTick(); return; }
+  if (!battlefrontNet.state.connected || !battlefrontNet.state.host) {
     return;
   }
   battlefrontNet.baseTick();
+  if (matchState.gameMode === "Battle Royale" && matchState.phase === "live" && !stageTransition.active) {
+    var teams = {}, count = 0, winner = -1;
+    if (playerHealth > 0) { teams[playerTeam] = true; }
+    for (var z in currentMap.entities) {
+      var list = currentMap.entities[z];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].isMatchBot && list[i].health > 0) { teams[list[i].team] = true; }
+      }
+    }
+    for (var team in teams) { if (teams.hasOwnProperty(team)) { count++; winner = Number(team); } }
+    if (count <= 1) { matchState.phase = "ending"; matchState.winnerTeam = winner; matchState.endingFrame = 0; }
+  }
 };
 keyPressed = function() {
   var net = battlefrontNet;
   if (net.lobby) {
-    var field = net.field === "invite" ? "invite" : "name";
-    if (keyCode === 8) {
-      net[field] = net[field].slice(0, -1);
-    } else if (keyCode === 9) {
-      net.field = field === "name" ? "invite" : "name";
-    } else if (keyCode === 13) {
-      net.requestRoom(net.invite ? "join" : "create");
-    } else if (typeof key === "string" && key.length === 1 && keyCode !== 17 && keyCode !== 91) {
-      net[field] = (net[field] + key).slice(0, field === "name" ? 16 : 600);
+    if (net.field === "name" && net.view !== "mode") {
+      if (keyCode === 8) { net.name = net.name.slice(0, -1); }
+      else if (typeof key === "string" && key.length === 1 && keyCode !== 17 && keyCode !== 91) { net.name = (net.name + key).slice(0, 16); }
     }
     return;
+  }
+  if (net.mode === "multi" && keyCode === inputKeys.escape && gameStage !== "Menu") {
+    if (gameStage === "Shop") { gameStage = "Menu"; return; }
+    net.lobby = true; net.view = "servers"; clearGameInput(); return;
   }
   if (net.state.connected && !net.state.host && !keys[keyCode]) {
     var selected = keyCode >= 49 && keyCode <= 53 ? keyCode - 49 : keyCode === inputKeys.medkit ? 1 : keyCode === inputKeys.detonator ? 2 : keyCode === inputKeys.landmine ? 3 : -1;
@@ -14646,8 +14696,17 @@ mousePressed = function() {
     net.lobbyClick();
     return;
   }
-  if (abs(mouseX - width / 2) <= 120 && mouseY < 28) {
-    net.lobby = true;
+  if (net.mode === "multi" && gameStage === "Menu") {
+    if (abs(mouseX - width / 2) <= 110) {
+      var y = mouseY - height / 2;
+      if (y >= -20 && y <= 16) { net.lobby = true; net.view = "servers"; net.listAt = -5000; }
+      else if (y >= 35 && y <= 71) { startCharacterShop(); gameStage = "Shop"; }
+      else if (y >= 90 && y <= 126) { net.lobby = true; net.view = "mode"; }
+    }
+    return;
+  }
+  if (net.mode === "multi" && abs(mouseX - width / 2) <= 120 && mouseY < 28) {
+    net.lobby = true; net.view = "servers";
     return;
   }
   if (net.state.connected && !net.state.host) {
@@ -14692,15 +14751,17 @@ draw = function() {
       return;
     }
     if (net.lobby) {
+      if (net.state.connected && net.state.host && net.started && gameStage === "Play") { net.baseDraw(); }
       net.drawLobby();
       return;
     }
+    if (net.mode === "solo" || (net.mode === "multi" && !net.started)) { net.baseDraw(); return; }
     if (!net.state.host && (net.waiting || !net.lastWorld || net.lastWorld.stage !== "Play")) {
       background(10, 17, 28);
       fill(190, 220, 240);
       textAlign(CENTER, CENTER);
       textFont(basicMainFont, 18);
-      text(net.state.connected ? "Waiting for the host to start" : net.state.message, width / 2, height / 2);
+      text(net.state.connected ? "Syncing match..." : net.state.message, width / 2, height / 2);
     } else {
       net.smoothVisuals();
       net.baseDraw();
@@ -14713,7 +14774,7 @@ draw = function() {
     fill(175, 220, 245);
     textAlign(CENTER, CENTER);
     textFont(basicMainFont, 11);
-    text((net.state.host ? "HOST" : "PLAYER") + "  " + net.state.peers.length + "/8  " + net.state.ping + " ms" + (net.state.connected ? "" : "  RECONNECTING"), width / 2, 14);
+    text("FRONT " + ((net.server || 0) + 1) + "  " + net.state.peers.length + "/8  " + net.state.ping + " ms" + (net.state.connected ? "" : "  RECONNECTING"), width / 2, 14);
     popStyle();
   } catch (error) {
     runtimeFailed = true;
