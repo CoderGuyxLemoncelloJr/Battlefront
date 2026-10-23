@@ -260,10 +260,14 @@ var pHpRegenLow = 0.02;
 var F_11D;
 var Sniper;
 var E11;
+var Blaster;
+var Lightsaber;
 var Laser;
 var Detonator;
 var DashArrow;
 var AIPlayer;
+var startCharacterShop;
+var addCreditChange;
 var playerDamageMult = 1;
 var jediDashSettings = {
     burstSpeed: 90,
@@ -3930,7 +3934,7 @@ var resetMatchForHome = function() {
     playerForce = playerMaxForce;
     stopCreditClicks();
 };
-var addCreditChange = function(amount, x, y) {
+addCreditChange = function(amount, x, y) {
     if (amount === 0) {
         return;
     }
@@ -11282,7 +11286,7 @@ Kashyyyk = new GameMap({
     ])
 });
 /**Create Blasters**/
-var Blaster = function(config) {
+Blaster = function(config) {
     this.weaponId = config.weaponId || "F_11D";
     this.displayName = config.displayName || this.weaponId.replace(/_/g, "-");
     this.spriteId = config.spriteId || this.weaponId;
@@ -11581,7 +11585,7 @@ E11 = new Blaster({
         rect(8, 3, 28, 14, 5);
     }
 });
-var Lightsaber = function(config) {
+Lightsaber = function(config) {
     config = config || {};
     this.isLightsaber = true;
     this.displayName = "Lightsaber";
@@ -12403,7 +12407,7 @@ var drawInventoryHUD = function(data) {
         }
     }
 };
-var startCharacterShop = function(nextCharacter) {
+startCharacterShop = function(nextCharacter) {
     if (stageTransition.active) {
         return;
     }
@@ -12451,7 +12455,38 @@ var startCharacterShop = function(nextCharacter) {
     });
 };
 /**Main Program**/
+var editorRecommendationVisible = true;
+var drawEditorRecommendation = function() {
+    background(12, 18, 26);
+    pushStyle();
+    rectMode(CENTER);
+    textAlign(CENTER, CENTER);
+    noStroke();
+    fill(28, 40, 54, 210);
+    var panelWidth = min(700, width - 32);
+    rect(width / 2, height / 2, panelWidth, 190, 12);
+    fill(235, 245, 255);
+    textFont(basicMainFont, 22);
+    text("Recommended", width / 2, height / 2 - 63);
+    textSize(15);
+    text("Use this link for the best view:", width / 2, height / 2 - 29);
+    var playLink = "https://www.khanacademy.org/computer-programming/pjs/6054169438175232?editor=no";
+    textSize(13);
+    if (textWidth(playLink) > panelWidth - 32) {
+        playLink = "https://www.khanacademy.org/\ncomputer-programming/pjs/6054169438175232?editor=no";
+        textSize(min(13, (panelWidth - 32) * 13 / textWidth("computer-programming/pjs/6054169438175232?editor=no")));
+    }
+    text(playLink, width / 2, height / 2 + 8);
+    fill(150, 205, 235);
+    textSize(13);
+    text("Click to continue", width / 2, height / 2 + 66);
+    popStyle();
+};
 mousePressed = function() {
+    if (editorRecommendationVisible && gameStage === "Menu" && !runtimeFailed) {
+        editorRecommendationVisible = false;
+        return;
+    }
     ensureAudioContext();
     if (canAcceptGameplayInput()) {
         gameInput.mousePressed = true;
@@ -12465,6 +12500,12 @@ mouseReleased = function() {
     }
 };
 keyPressed = function() {
+    if (editorRecommendationVisible && gameStage === "Menu" && !runtimeFailed) {
+        if (keyCode === 13 || keyCode === 27) {
+            editorRecommendationVisible = false;
+        }
+        return;
+    }
     if (soundEnabled) {
         ensureAudioContext();
     }
@@ -13002,6 +13043,10 @@ draw = function() {
     }
     try {
         prepareRenderClock(millis());
+        if (editorRecommendationVisible && gameStage === "Menu") {
+            drawEditorRecommendation();
+            return;
+        }
         var creditDiff = playerCredits - creditDisplay.value;
         var creditStep = 0;
         if (abs(creditDiff) > 0.01) {
