@@ -26,6 +26,7 @@ source = source.replace('playSkinName.indexOf("rebel") >= 0 || playSkinName.inde
 source = source.replace('if (matchState.endingFrame >= matchState.endingHoldFrames) {', 'if (matchState.endingFrame >= matchState.endingHoldFrames) {\n      if (battlefrontNet.mode === "multi" && battlefrontNet.state.host) { battlefrontNet.nextRound(false); return; }');
 source = source.replaceAll('if (matchState.gameMode === "Battle Royale" && matchState.phase === "live") {', 'if (matchState.gameMode === "Battle Royale" && matchState.phase === "live" && battlefrontNet.mode !== "multi") {');
 source = source.replace('if (deathScreenFrame >= deathRespawnAt && !deathTransStarted) {', 'if (deathScreenFrame >= deathRespawnAt && !deathTransStarted && !(battlefrontNet.mode === "multi" && matchState.gameMode === "Battle Royale")) {');
+source = source.replace('case "MenuPlay":\n', 'case "MenuPlay":\n                if (battlefrontNet.mode === "multi") {\n                  if (menuPointerX >= -125 && menuPointerX <= 125 && menuPointerY >= -335 && menuPointerY <= -285) {\n                    noStroke(); fill(220, 150); rect(0, -310, 250, 50);\n                    if (mouseClick) { battlefrontNet.openServers(); }\n                  }\n                  break;\n                }\n');
 const network = fs.readFileSync(path.join(root, 'network.pjs.js'), 'utf8');
 const output = header + state + source + '\n' + network;
 fs.writeFileSync(path.join(root, 'battlefront-multiplayer.js'), output);

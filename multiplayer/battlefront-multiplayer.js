@@ -4298,6 +4298,13 @@ var menu = function() {
             switch (currentMenu) {
               //Update the menu
               case "MenuPlay":
+                if (battlefrontNet.mode === "multi") {
+                  if (menuPointerX >= -125 && menuPointerX <= 125 && menuPointerY >= -335 && menuPointerY <= -285) {
+                    noStroke(); fill(220, 150); rect(0, -310, 250, 50);
+                    if (mouseClick) { battlefrontNet.openServers(); }
+                  }
+                  break;
+                }
                 noStroke();
                 fill(220, 150);
                 if (menuPointerX >= -125 && menuPointerX <= 125 && menuPointerY >= 170 - 480 - 25 && menuPointerY <= 170 - 480 + 25) {
@@ -13566,9 +13573,11 @@ battlefrontNet.requestRoom = function(type) {
 };
 battlefrontNet.button = function(label, x, y, w, selected) {
   rectMode(CORNER);
-  noStroke();
-  fill(selected ? color(48, 115, 150, 210) : color(26, 45, 65, 185));
+  stroke(150, 220, 255, selected ? 230 : 125);
+  strokeWeight(1);
+  fill(selected ? color(35, 90, 125, 150) : color(0, 0, 15, 190));
   rect(x, y, w, 36, 5);
+  noStroke();
   fill(225, 240, 255);
   textFont(basicMainFont, 14);
   textAlign(CENTER, CENTER);
@@ -13587,9 +13596,18 @@ battlefrontNet.pick = function(mode) {
 };
 battlefrontNet.drawLobby = function() {
   var net = battlefrontNet, x = width / 2, y = height / 2;
-  background(10, 17, 28);
+  background(0, 0, 15);
   pushStyle();
-  textFont(basicMainFont, 28);
+  noStroke();
+  for (var star = 0; star < menuStars.length; star++) {
+    fill(menuStars[star].color);
+    ellipse(menuStars[star].x * width / 600, menuStars[star].y * height / 600, menuStars[star].size, menuStars[star].size);
+  }
+  for (var scan = 0; scan < height; scan += 7) {
+    stroke(50, 160, 255, 9); line(0, scan, width, scan);
+  }
+  noStroke();
+  textFont(headerFont, 28);
   textAlign(CENTER, CENTER);
   fill(220, 240, 255);
   text(net.view === "mode" ? "BATTLEFRONT" : "Servers", x, y - 190);
@@ -13668,20 +13686,26 @@ battlefrontNet.nextRound = function(first) {
   matchModeIndex = net.cycle % 2;
   transitionToPlay(net.map(["Kashyyyk", "Jakku", "Star Destroyer"][net.cycle % 3]));
 };
+imagesToLoad.push({name: "MenuPlayMulti", w: 600, h: 600, display: function() {
+  background(0);
+  textAlign(CENTER, CENTER);
+  fill(100); stroke(220); strokeWeight(4); rectMode(CENTER);
+  rect(300, 170, 250, 50);
+  fill(255); textFont(headerFont, 35); text("Multiplayer BETA", 295, 105);
+  textFont(mainFont, 25); text("Servers", 300, 170);
+}});
+battlefrontNet.openServers = function() {
+  battlefrontNet.lobby = true;
+  battlefrontNet.view = "servers";
+  battlefrontNet.listAt = -5000;
+  clearGameInput();
+};
 battlefrontNet.baseMenu = menu;
 menu = function() {
-  var net = battlefrontNet;
-  if (net.mode !== "multi") { net.baseMenu(); return; }
-  background(10, 17, 28);
-  fill(220, 240, 255);
-  textAlign(CENTER, CENTER);
-  textFont(basicMainFont, 32);
-  text("BATTLEFRONT", width / 2, height / 2 - 145);
-  textSize(13);
-  text("MULTIPLAYER BETA", width / 2, height / 2 - 103);
-  net.button("Play", width / 2 - 110, height / 2 - 20, 220, false);
-  net.button("Shop", width / 2 - 110, height / 2 + 35, 220, false);
-  net.button("Back", width / 2 - 110, height / 2 + 90, 220, false);
+  var net = battlefrontNet, image = loadedImages.MenuPlay;
+  if (net.mode === "multi") { loadedImages.MenuPlay = loadedImages.MenuPlayMulti; }
+  net.baseMenu();
+  loadedImages.MenuPlay = image;
 };
 battlefrontNet.resetRound = function() {
   battlefrontNet.remotes = {};
@@ -14694,15 +14718,6 @@ mousePressed = function() {
   var net = battlefrontNet;
   if (net.lobby) {
     net.lobbyClick();
-    return;
-  }
-  if (net.mode === "multi" && gameStage === "Menu") {
-    if (abs(mouseX - width / 2) <= 110) {
-      var y = mouseY - height / 2;
-      if (y >= -20 && y <= 16) { net.lobby = true; net.view = "servers"; net.listAt = -5000; }
-      else if (y >= 35 && y <= 71) { startCharacterShop(); gameStage = "Shop"; }
-      else if (y >= 90 && y <= 126) { net.lobby = true; net.view = "mode"; }
-    }
     return;
   }
   if (net.mode === "multi" && abs(mouseX - width / 2) <= 120 && mouseY < 28) {

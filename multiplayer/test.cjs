@@ -126,7 +126,7 @@ test('singleplayer runs without the bridge and multiplayer Play opens only fixed
   for(let i=0;i<12;i++)solo.frame(i*1000/60);
   assert(solo.g.playerPos.x>start);assert.equal(solo.net.outbox.length,0);
   solo.net.pick('multi');solo.g.mouseX=solo.g.width/2;solo.g.mouseY=solo.g.height/2;
-  solo.g.mousePressed();assert.equal(solo.net.view,'servers');assert(solo.net.lobby);
+  solo.net.openServers();assert.equal(solo.net.view,'servers');assert(solo.net.lobby);
   solo.g.mouseX=solo.g.width/2+220;solo.g.mouseY=solo.g.height/2-45;
   solo.g.mousePressed();assert.equal(solo.net.request.type,'server');assert.equal(solo.net.request.server,'BFPUBLIC01');
 });
