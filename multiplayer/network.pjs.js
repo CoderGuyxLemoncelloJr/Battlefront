@@ -617,6 +617,52 @@ battlefrontNet.renderActor = function(actor) {
   rect(actor.pos.x - 26, actor.pos.y - 68, 52 * constrain(actor.health / max(1, actor.maxHealth), 0, 1), 5);
   popStyle();
 };
+battlefrontNet.trackVisual = function(row, entity, previous, tracks) {
+  var old = previous[row.id];
+  var snap = !old || floor(old.z) !== floor(row.z) || pow(old.x - row.x, 2) + pow(old.y - row.y, 2) > 90000 || old.alive !== (row.health > 0);
+  var track = {
+    x: snap ? row.x : old.x,
+    y: snap ? row.y : old.y,
+    z: snap ? row.z : old.z,
+    angle: snap ? row.angle : old.angle,
+    target: row,
+    entity: entity,
+    alive: row.health > 0
+  };
+  tracks[row.id] = track;
+  var pos = entity ? entity.pos : playerPos;
+  pos.set(track.x, track.y, track.z);
+  if (entity && row.type === "actor") {
+    entity.bodyAngle = track.angle;
+  }
+};
+battlefrontNet.smoothVisuals = function() {
+  var net = battlefrontNet;
+  var now = millis();
+  var elapsed = net.visualAt === undefined ? 0 : constrain(now - net.visualAt, 0, 250);
+  net.visualAt = now;
+  if (net.state.host || !net.visuals) {
+    return;
+  }
+  var blend = 1 - exp(-elapsed / 60);
+  for (var id in net.visuals) {
+    if (!net.visuals.hasOwnProperty(id)) {
+      continue;
+    }
+    var track = net.visuals[id];
+    var target = track.target;
+    track.x += (target.x - track.x) * blend;
+    track.y += (target.y - track.y) * blend;
+    track.z += (target.z - track.z) * blend;
+    var pos = track.entity ? track.entity.pos : playerPos;
+    pos.set(track.x, track.y, track.z);
+    if (track.entity && target.type === "actor") {
+      var turn = ((target.angle - track.angle) % 360 + 540) % 360 - 180;
+      track.angle += turn * blend;
+      track.entity.bodyAngle = track.angle;
+    }
+  }
+};
 battlefrontNet.makeVisual = function(row) {
   var net = battlefrontNet;
   if (row.type === "actor") {
@@ -707,6 +753,8 @@ battlefrontNet.applyWorld = function(world, promote) {
     }
   }
   var entities = {};
+  var previousVisuals = changedMap || promote ? {} : net.visuals || {};
+  var visuals = {};
   net.remotes = {};
   var owners = {};
   for (var i = 0; i < world.actors.length; i++) {
@@ -716,6 +764,9 @@ battlefrontNet.applyWorld = function(world, promote) {
     }
     if (row.id === net.state.id) {
       playerPos.set(row.x, row.y, row.z);
+      if (!promote) {
+        net.trackVisual(row, null, previousVisuals, visuals);
+      }
       playerVel.set(row.vx || 0, row.vy || 0, row.vz || 0);
       playerHealth = row.health;
       playerShield = row.shield;
@@ -785,6 +836,7 @@ battlefrontNet.applyWorld = function(world, promote) {
       entity.isMatchBot = true;
     } else {
       entity = net.makeVisual(row);
+      net.trackVisual(row, entity, previousVisuals, visuals);
     }
     if (!entities[floor(entity.pos.z)]) {
       entities[floor(entity.pos.z)] = [];
@@ -832,11 +884,16 @@ battlefrontNet.applyWorld = function(world, promote) {
       }
     } else {
       projectile = net.makeVisual(object);
+      net.trackVisual(object, projectile, previousVisuals, visuals);
     }
     if (!entities[floor(projectile.pos.z)]) {
       entities[floor(projectile.pos.z)] = [];
     }
     entities[floor(projectile.pos.z)].push(projectile);
+  }
+  net.visuals = promote ? {} : visuals;
+  if (changedMap || promote) {
+    net.visualAt = millis();
   }
   currentMap.entities = entities;
   currentMap._initialTeamBotsSpawned = true;
@@ -1085,6 +1142,7 @@ draw = function() {
   try {
     net.poll();
     if (gameStage === "ImageLoad") {
+      net.smoothVisuals();
       net.baseDraw();
       return;
     }
@@ -1099,6 +1157,7 @@ draw = function() {
       textFont(basicMainFont, 18);
       text(net.state.connected ? "Waiting for the host to start" : net.state.message, width / 2, height / 2);
     } else {
+      net.smoothVisuals();
       net.baseDraw();
     }
     pushStyle();

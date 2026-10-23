@@ -84,4 +84,37 @@ test('lobby and waiting screens render at 850x700 and use only canvas controls',
   net.lobby=true;frame(0);net.lobby=false;net.waiting=true;frame(17);
   assert.equal(g.runtimeFailed,false);
 });
+test('guest motion interpolates players and shots, takes the short turn, and is frame-rate independent', () => {
+  const host=game('host',true), guest=game('guest',false), slower=game('guest',false);
+  receive(host.net,input());
+  const actor=host.net.remotes.guest;
+  actor.weapon.shootFrom(actor.pos,0,actor);
+  const first=JSON.parse(JSON.stringify(host.net.snapshot()));
+  first.actors.find(row=>row.id==='host').angle=350;
+  for(const client of [guest,slower]) {client.net.applyWorld(first,false);client.frame(0);}
+  const next=JSON.parse(JSON.stringify(first));
+  for(const row of next.actors) row.x+=60;
+  for(const row of next.objects) row.x+=60;
+  next.actors.find(row=>row.id==='host').angle=10;
+  const initial=guest.g.playerPos.x;
+  for(const client of [guest,slower]) client.net.applyWorld(next,false);
+  assert.equal(guest.g.playerPos.x,initial);
+  guest.frame(20);
+  assert(guest.g.playerPos.x>initial && guest.g.playerPos.x<initial+60);
+  const entities=Object.values(guest.g.currentMap.entities).flat();
+  const remote=entities.find(row=>row.netId==='host');
+  assert(remote.bodyAngle>350 && remote.bodyAngle<370);
+  const shot=next.objects.find(row=>row.type==='laser');
+  assert(guest.net.visuals[shot.id].x>shot.x-60 && guest.net.visuals[shot.id].x<shot.x);
+  guest.frame(40);guest.frame(60);slower.frame(60);
+  assert(Math.abs(guest.g.playerPos.x-slower.g.playerPos.x)<0.000001);
+  const teleport=JSON.parse(JSON.stringify(next));
+  teleport.actors.find(row=>row.id==='guest').x+=1000;
+  guest.net.applyWorld(teleport,false);
+  assert.equal(guest.g.playerPos.x,teleport.actors.find(row=>row.id==='guest').x);
+  guest.net.state.host=true;
+  guest.net.applyWorld(next,true);
+  assert.equal(guest.g.playerPos.x,next.actors.find(row=>row.id==='guest').x);
+  assert.equal(Object.keys(guest.net.visuals).length,0);
+});
 console.log(passed+' multiplayer game checks passed');
