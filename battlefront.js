@@ -13319,7 +13319,7 @@ draw = function() {
             rectMode(CENTER);
             rect(95, height - 95, 155, 155, 5);
             hudLayout.minimapY = height - 170;
-            tint(255, mouseX <= 180 && mouseY >= height - 180 ? 100 : 165);
+            tint(255, 255, 255, mouseX <= 180 && mouseY >= height - 180 ? 100 : 165);
             image(minimapView.canvas, hudLayout.minimapX, hudLayout.minimapY, hudLayout.minimapSize, hudLayout.minimapSize);
             noTint();
             getSelectedCharacterData();
