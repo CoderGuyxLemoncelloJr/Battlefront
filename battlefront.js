@@ -5261,7 +5261,7 @@ var drawDevConsole = function() {
         }) : [];
         matchIndex = constrain(matchIndex, 0, max(0, filteredCommands.length - 1));
         if (devConsole.active && filteredCommands.length > 0) {
-            var maxShow = min(12, filteredCommands.length, max(0, floor((height - top - 48) / 18)));
+            var maxShow = min(12, min(filteredCommands.length, max(0, floor((height - top - 48) / 18))));
             var firstMatch = max(0, matchIndex - maxShow + 1);
             var boxY = height - 32 - maxShow * 18;
             fill(18, 25, 35, 245);
