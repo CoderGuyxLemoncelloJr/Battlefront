@@ -165,6 +165,7 @@ var inventoryState = {
 var getHeldItem;
 var returnToWeapon;
 var drawHeldItem;
+var drawPlacementPreview;
 var removePlacedCrates;
 var worldToScreen;
 var screenToWorld;
@@ -9517,8 +9518,7 @@ Landmine.prototype.render = function() {
     }
     pushMatrix();
     translate(this.pos.x, this.pos.y);
-    rotate(this.rv);
-    drawImg(this.type === "blue" ? loadedImages.blue_landmine_sprite : loadedImages.red_landmine_sprite, -35, -35, 70, 70);
+    drawImg(this.type === "blue" ? loadedImages.blue_landmine_sprite : loadedImages.red_landmine_sprite, -50, -50, 70, 70);
     popMatrix();
 };
 var JetParticle = function(config) {
@@ -10010,6 +10010,7 @@ GameMap.prototype.render = function() {
             }
         }
     }
+    drawPlacementPreview();
     popMatrix();
     performanceStats.renderMs = millis() - renderStart;
 };
@@ -11878,7 +11879,7 @@ var testing = new Ability({
 var Medkit = function(config) {
     Ability.call(this, config);
     this.rechargeTime = config.rechargeTime !== undefined ? config.rechargeTime : 500;
-    this.duration = 0;
+    this.duration = config.duration !== undefined ? config.duration : 90;
     this.heldItem = true;
     this.itemName = "Medkit";
     this.maxUses = config.maxUses !== undefined ? config.maxUses : 2;
@@ -11886,8 +11887,9 @@ var Medkit = function(config) {
     this.canUse = function() {
         return playerHealth < playerMaxHealth;
     };
-    this.onActivate = config.onActivate || function() {
-        playerHealth = min(playerMaxHealth, playerHealth + 30);
+    this.onActivate = config.onActivate || function() {};
+    this.whileActive = config.whileActive || function() {
+        playerHealth = min(playerMaxHealth, playerHealth + 30 * min(tickClock.scale, this.durationCount) / this.duration);
     };
     this.onDeactivate = config.onDeactivate || function() {};
     this.activatorKey = config.activatorKey !== undefined ? config.activatorKey : inputKeys.medkit;
@@ -11919,7 +11921,7 @@ var throwDetonator = function() {
 var ThrowDetonator = function(config) {
     Ability.call(this, config);
     this.rechargeTime = config.rechargeTime !== undefined ? config.rechargeTime : 179;
-    this.duration = 0;
+    this.duration = config.duration !== undefined ? config.duration : 15;
     this.heldItem = true;
     this.itemName = "Grenade";
     this.maxUses = config.maxUses !== undefined ? config.maxUses : 2;
@@ -11993,8 +11995,7 @@ var PlantLandmine = function(placement) {
         xVel: 0,
         yVel: 0,
         zVel: 0,
-        rv: placement ? placement.rotation : bodyAngle,
-        r: 0,
+        r: random(-0.2, 0.2),
         owner: {
             isPlayer: true,
             team: playerTeam
@@ -12013,7 +12014,7 @@ var isItemPlacementValid = function(spot, item) {
     if (dist(playerPos.x, playerPos.y, spot.x, spot.y) < radius + hitboxSize + 8 || (currentMap.placedCrates && currentMap.placedCrates.length >= 20 && item.itemName === "Crate")) {
         return false;
     }
-    var cols = currentMap.getNearbyCollisions(floor(spot.z), spot.x, spot.y, radius * 1.415 + 2) || [];
+    var cols = currentMap.getNearbyCollisions(floor(spot.z), spot.x, spot.y, radius + 2) || [];
     var offsets = [
         [0, 0],
         [-radius, -radius],
@@ -12022,9 +12023,8 @@ var isItemPlacementValid = function(spot, item) {
         [radius, radius]
     ];
     for (var pointIndex = 0; pointIndex < offsets.length; pointIndex++) {
-        var angle = spot.rotation || 0;
-        var x = spot.x + offsets[pointIndex][0] * cos(angle) - offsets[pointIndex][1] * sin(angle);
-        var y = spot.y + offsets[pointIndex][0] * sin(angle) + offsets[pointIndex][1] * cos(angle);
+        var x = spot.x + offsets[pointIndex][0];
+        var y = spot.y + offsets[pointIndex][1];
         var supported = false;
         for (var colIndex = 0; colIndex < cols.length; colIndex++) {
             if (cols[colIndex].plane && cols[colIndex].checkCollision(x, y, spot.z)) {
@@ -12049,12 +12049,13 @@ var isItemPlacementValid = function(spot, item) {
     return true;
 };
 var getItemPlacement = function(item) {
-    var reach = item.itemName === "Crate" ? 80 : 60;
+    var aim = screenToWorld(mouseX, mouseY);
+    var angle = atan2(aim.y - playerPos.y, aim.x - playerPos.x);
+    var reach = constrain(dist(aim.x, aim.y, playerPos.x, playerPos.y), 100, 155);
     var spot = {
-        x: playerPos.x + cos(bodyAngle - 90) * reach,
-        y: playerPos.y + sin(bodyAngle - 90) * reach,
+        x: round((playerPos.x + cos(angle) * reach) / 20) * 20,
+        y: round((playerPos.y + sin(angle) * reach) / 20) * 20,
         z: floor(playerPos.z),
-        rotation: bodyAngle,
         valid: false
     };
     spot.valid = isItemPlacementValid(spot, item);
@@ -12065,7 +12066,6 @@ var addPlacedCrate = function(spot) {
         x: spot.x,
         y: spot.y,
         size: 70,
-        rotation: -(spot.rotation || 0),
         lowZ: spot.z,
         highZ: spot.z + 0.8
     });
@@ -12120,7 +12120,7 @@ var PlaceCrate = function(config) {
     this.heldItem = true;
     this.itemName = "Crate";
     this.placeable = true;
-    this.duration = 0;
+    this.duration = 24;
     this.rechargeTime = 30;
     this.maxUses = config.maxUses !== undefined ? config.maxUses : 3;
     this.remainingUses = this.maxUses;
@@ -12142,7 +12142,7 @@ PlaceCrate.prototype = Object.create(Ability.prototype);
 var PlaceLandmine = function(config) {
     Ability.call(this, config);
     this.rechargeTime = config.rechargeTime !== undefined ? config.rechargeTime : 150;
-    this.duration = 0;
+    this.duration = 18;
     this.heldItem = true;
     this.itemName = "Mine";
     this.placeable = true;
@@ -12261,7 +12261,7 @@ var selectHeldItem = function(slot) {
         inventoryState.lastWeapon = currentGun;
     }
     inventoryState.selected = slot;
-    inventoryState.readyAt = tickClock.gameMs;
+    inventoryState.readyAt = tickClock.gameMs + 180;
     inventoryState.suppressClick = !!mouseIsPressed;
     if (slot !== 0) {
         stopSaberAudio();
@@ -12323,9 +12323,10 @@ var drawItemIcon = function(item, x, y, size) {
     }
 };
 drawHeldItem = function(item) {
+    var useProgress = item.durationCount > 0 ? 1 - item.durationCount / item.duration : 0;
     pushMatrix();
     pushStyle();
-    translate(0, item.placeable ? item.itemName === "Crate" ? -80 : -60 : -43);
+    translate(0, -43 - sin(useProgress * 180) * 9);
     var itemSize = item.itemName === "Crate" ? 40 : 30;
     drawItemIcon(item, 0, 0, itemSize);
     var hand = getHandColors(skin);
@@ -12335,6 +12336,28 @@ drawHeldItem = function(item) {
     ellipse(-itemSize * 0.48, 6, 17, 17);
     ellipse(itemSize * 0.48, 6, 17, 17);
     popStyle();
+    popMatrix();
+};
+drawPlacementPreview = function() {
+    var item = getHeldItem();
+    if (!item || !item.placeable || !canAcceptGameplayInput() || squadCommandMode) {
+        return;
+    }
+    var spot = item.durationCount > 0 ? item.placement : getItemPlacement(item);
+    if (!spot) {
+        return;
+    }
+    var valid = isItemPlacementValid(spot, item);
+    pushMatrix();
+    translate(spot.x - camPos.x, spot.y - camPos.y);
+    rectMode(CENTER);
+    stroke(valid ? color(100, 240, 175, 230) : color(255, 85, 75, 230));
+    fill(valid ? color(50, 200, 130, 65) : color(255, 60, 50, 65));
+    strokeWeight(3 / zoom);
+    var span = item.itemName === "Crate" ? 70 : 34;
+    rect(0, 0, span, span, 4);
+    line(-span / 2, -span / 2, span / 2, span / 2);
+    line(span / 2, -span / 2, -span / 2, span / 2);
     popMatrix();
 };
 var drawInventoryHUD = function(data) {
@@ -13060,22 +13083,6 @@ var drawRuntimeError = function() {
     text("Runtime error — press Escape to return to the menu", 12, 12, width - 24, 42);
     text(runtimeErrMsg, 12, 64, width - 24, height - 76);
 };
-var fps = { at: 0, frames: 0, value: 0 };
-var drawFps = function() {
-    var now = millis();
-    fps.frames++;
-    if (now - fps.at >= 500) {
-        fps.value = round(fps.frames * 1000 / (now - fps.at));
-        fps.frames = 0;
-        fps.at = now;
-    }
-    pushStyle();
-    fill(225, 235, 245, 190);
-    textSize(12);
-    textAlign(CENTER, TOP);
-    text(fps.value + " FPS", width / 2, 8);
-    popStyle();
-};
 draw = function() {
     if (runtimeFailed) {
         drawRuntimeError();
@@ -13508,7 +13515,6 @@ draw = function() {
             }
         }
         drawStageTrans();
-        drawFps();
     } catch (e) {
         runtimeErrMsg = String(e) + (e && e.stack ? "\n" + e.stack : "");
         runtimeFailed = true;
